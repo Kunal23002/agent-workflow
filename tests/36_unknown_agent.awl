@@ -1,0 +1,2 @@
+// EXPECT_ERR: unknown agent
+let r = Nope("x")

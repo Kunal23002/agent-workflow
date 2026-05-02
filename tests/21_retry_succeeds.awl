@@ -1,0 +1,5 @@
+// EXPECT_OK
+// CHECK: x = 1
+retry 3 {
+  let x = 1
+}

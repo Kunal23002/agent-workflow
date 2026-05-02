@@ -1,0 +1,8 @@
+// EXPECT_OK
+// CHECK: y = 5
+try {
+  let y = 5
+} catch e => {
+  let y = 0
+};
+let z = y

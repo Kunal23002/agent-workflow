@@ -1,0 +1,4 @@
+// EXPECT_OK
+// CHECK: summary = "\"hi\""
+agent S = FixedAgent(Summarizer);
+let r = S("hi")

@@ -1,0 +1,2 @@
+// EXPECT_ERR: boom
+fail "boom"

@@ -1,0 +1,21 @@
+// EXPECT_OK
+// CHECK: result = "draft about: \"refined topic\""
+agent Search    from mock:"refined topic";
+agent Plan      = FixedAgent(Planner);
+agent Critique  = FixedAgent(Critic);
+agent Write     = FixedAgent(Writer);
+agent Summarize = CustomAI(prompt = "Summarize", model = "claude-opus-4-7");
+
+let topic    = Search();
+let plan     = Plan(topic);
+let summary  = Summarize(topic);
+let critique = Critique(summary);
+
+if critique.score > 0.5 then
+  let draft = Write(topic)
+else
+  retry 2 {
+    let draft = Write(topic)
+  };
+
+let result = draft.draft

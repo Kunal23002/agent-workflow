@@ -1,0 +1,7 @@
+// EXPECT_OK
+// CHECK: merged =
+// CHECK: k0 = "a"
+// CHECK: k1 = "b"
+// CHECK: k2 = "c"
+agent M = FixedAgent(Merger);
+let r = M("a", "b", "c")

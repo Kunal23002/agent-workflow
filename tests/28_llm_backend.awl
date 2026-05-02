@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: backend = "llm"
+// CHECK: target = "claude-opus-4-7"
+// CHECK_STDOUT: [llm    claude-opus-4-7]
+agent Ask from llm:"claude-opus-4-7";
+let r = Ask("hi")

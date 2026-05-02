@@ -1,0 +1,15 @@
+// EXPECT_OK
+// CHECK: eq = true
+// CHECK: neq = true
+// CHECK: gt = true
+// CHECK: lt = true
+// CHECK: gte = true
+// CHECK: lte = true
+// CHECK: gt_false = false
+let eq  = 1 == 1;
+let neq = 1 != 2;
+let gt  = 5 >  3;
+let lt  = 2 <  4;
+let gte = 3 >= 3;
+let lte = 4 <= 4;
+let gt_false = 1 > 5

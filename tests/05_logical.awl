@@ -1,0 +1,9 @@
+// EXPECT_OK
+// CHECK: a = false
+// CHECK: b = true
+// CHECK: c = false
+// CHECK: d = true
+let a = true && false;
+let b = true || false;
+let c = false || false;
+let d = (1 < 2) && (3 > 2)

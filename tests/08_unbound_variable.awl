@@ -1,0 +1,2 @@
+// EXPECT_ERR: unbound variable
+let y = nope

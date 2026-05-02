@@ -1,0 +1,2 @@
+// EXPECT_ERR: unbound variable
+let r = { a = 1, b = nope, c = 3 }

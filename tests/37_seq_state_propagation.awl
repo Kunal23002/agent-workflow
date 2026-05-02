@@ -1,0 +1,9 @@
+// EXPECT_OK
+// CHECK: a = 1
+// CHECK: b = 2
+// CHECK: c = 3
+// CHECK: d = 6
+let a = 1;
+let b = a + 1;
+let c = b + 1;
+let d = a + b + c

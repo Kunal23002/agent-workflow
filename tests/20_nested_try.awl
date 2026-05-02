@@ -1,0 +1,11 @@
+// EXPECT_OK
+// CHECK: final = "inner"
+try {
+  try {
+    fail "inner"
+  } catch e1 => {
+    fail e1
+  }
+} catch e2 => {
+  let final = e2
+}

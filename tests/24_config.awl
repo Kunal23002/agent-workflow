@@ -1,0 +1,9 @@
+// EXPECT_OK
+// CHECK: api_key = "abc"
+// CHECK: timeout = 30
+// CHECK: base_url = "https://api.example.com"
+config {
+  api_key  = "abc",
+  base_url = "https://api.example.com",
+  timeout  = 30
+}

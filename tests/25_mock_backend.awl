@@ -1,0 +1,4 @@
+// EXPECT_OK
+// CHECK: r = "fixed mock value"
+agent Search from mock:"fixed mock value";
+let r = Search()

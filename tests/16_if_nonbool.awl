@@ -1,0 +1,5 @@
+// EXPECT_ERR: if-condition is not a boolean
+if "x" then
+  let r = 1
+else
+  let r = 2

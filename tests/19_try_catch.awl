@@ -1,0 +1,7 @@
+// EXPECT_OK
+// CHECK: recovered = "oops"
+try {
+  fail "oops"
+} catch e => {
+  let recovered = e
+}

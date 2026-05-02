@@ -1,0 +1,7 @@
+// EXPECT_OK
+// CHECK: model = "claude-opus-4-7"
+// CHECK: prompt = "Summarize"
+// CHECK: input = "text"
+// CHECK_STDOUT: [customAI claude-opus-4-7]
+agent S = CustomAI(prompt = "Summarize", model = "claude-opus-4-7");
+let r = S("text")

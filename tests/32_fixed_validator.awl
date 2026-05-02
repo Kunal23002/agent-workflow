@@ -1,0 +1,5 @@
+// EXPECT_OK
+// CHECK: valid = true
+// CHECK: payload = "input"
+agent V = FixedAgent(Validator);
+let r = V("input")

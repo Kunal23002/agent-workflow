@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: backend = "python"
+// CHECK: target = "mod.foo"
+// CHECK_STDOUT: [python mod.foo]
+agent Run from python:"mod.foo";
+let r = Run("a", "b")

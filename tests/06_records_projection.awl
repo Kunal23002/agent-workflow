@@ -1,0 +1,9 @@
+// EXPECT_OK
+// CHECK: name = "Ada"
+// CHECK: age = 30
+// CHECK: deep = 42
+let p      = { name = "Ada", age = 30 };
+let name   = p.name;
+let age    = p.age;
+let nested = { outer = { inner = { core = 42 } } };
+let deep   = nested.outer.inner.core

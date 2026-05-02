@@ -1,0 +1,5 @@
+// EXPECT_OK
+// CHECK: goal = "world peace"
+// CHECK: steps =
+agent P = FixedAgent(Planner);
+let r = P("world peace")

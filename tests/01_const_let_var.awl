@@ -1,0 +1,7 @@
+// EXPECT_OK
+// CHECK: x = 42
+// CHECK: s = "hello"
+// CHECK: b = true
+let x = 42;
+let s = "hello";
+let b = true

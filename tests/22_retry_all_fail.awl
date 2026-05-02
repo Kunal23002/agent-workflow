@@ -1,0 +1,4 @@
+// EXPECT_ERR: always
+retry 2 {
+  fail "always"
+}

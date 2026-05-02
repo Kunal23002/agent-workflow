@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: backend = "http"
+// CHECK: target = "https://example.com/api"
+// CHECK_STDOUT: [http   https://example.com/api]
+agent Get from http:"https://example.com/api";
+let r = Get("query")

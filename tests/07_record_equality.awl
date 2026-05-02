@@ -1,0 +1,8 @@
+// EXPECT_OK
+// CHECK: same = true
+// CHECK: diff = false
+let a = { x = 1, y = 2 };
+let b = { x = 1, y = 2 };
+let c = { x = 1, y = 3 };
+let same = a == b;
+let diff = a == c

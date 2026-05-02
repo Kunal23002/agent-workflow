@@ -1,0 +1,8 @@
+// EXPECT_OK
+// CHECK: result = "good"
+agent C = FixedAgent(Critic);
+let critique = C("some output");
+if critique.score > 0.8 then
+  let result = "good"
+else
+  let result = "bad"

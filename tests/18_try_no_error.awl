@@ -1,0 +1,8 @@
+// EXPECT_OK
+// CHECK: a = 1
+// NOT: b =
+try {
+  let a = 1
+} catch e => {
+  let b = 2
+}

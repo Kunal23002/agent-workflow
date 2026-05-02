@@ -1,0 +1,3 @@
+// EXPECT_OK
+// CHECK: s = "foobar"
+let s = "foo" + "bar"

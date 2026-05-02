@@ -1,0 +1,2 @@
+// EXPECT_ERR: type error in operator
+let z = 1 + true

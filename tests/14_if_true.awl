@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: r = "yes"
+if 1 < 2 then
+  let r = "yes"
+else
+  let r = "no"

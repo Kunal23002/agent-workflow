@@ -1,0 +1,3 @@
+// EXPECT_ERR: exactly one argument
+agent S = CustomAI(prompt = "p", model = "m");
+let r = S("a", "b")

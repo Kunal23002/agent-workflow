@@ -1,0 +1,36 @@
+// Demo program for the Agent Workflow Language
+//
+// Exercises every form in the spec: config, three flavours of agent
+// declarations, expressions (records, projections, binops),
+// let-bindings, if/then/else, retry, try/catch, and fail.
+
+config {
+  api_key  = "sk-test",
+  base_url = "https://api.example.com",
+  timeout  = 30
+};
+
+agent Plan      = FixedAgent(Planner);
+agent Critique  = FixedAgent(Critic);
+agent Search    from mock:"raw search content for the goal";
+agent Summarize = CustomAI(prompt = "Summarize the input clearly",
+                           model  = "claude-opus-4-7");
+
+let goal     = "Research quantum error correction";
+let plan     = Plan(goal);
+let raw      = Search(goal);
+let summary  = Summarize(raw);
+let critique = Critique(summary);
+
+if critique.score > 0.8 then
+  let result = summary
+else
+  retry 2 {
+    let result = Summarize(raw)
+  };
+
+try {
+  fail "demonstration of failure handling"
+} catch err => {
+  let recovered = err
+}

@@ -1,0 +1,3 @@
+// EXPECT_ERR: field access on non-record
+let s = "hi";
+let z = s.x

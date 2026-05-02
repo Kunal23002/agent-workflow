@@ -1,0 +1,13 @@
+// EXPECT_OK
+// CHECK: a = 3
+// CHECK: b = 7
+// CHECK: c = 20
+// CHECK: d = 5
+// CHECK: e = 14
+// CHECK: f = 20
+let a = 1 + 2;
+let b = 10 - 3;
+let c = 4 * 5;
+let d = 20 / 4;
+let e = 2 + 3 * 4;
+let f = (2 + 3) * 4
