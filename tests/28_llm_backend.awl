@@ -1,6 +1,8 @@
 // EXPECT_OK
 // CHECK: backend = "llm"
-// CHECK: target = "claude-opus-4-7"
+// CHECK: model = "claude-opus-4-7"
+// CHECK: prompt = "hi"
+// CHECK: response = "(simulated claude-opus-4-7 response)"
 // CHECK_STDOUT: [llm    claude-opus-4-7]
 agent Ask from llm:"claude-opus-4-7";
 let r = Ask("hi")

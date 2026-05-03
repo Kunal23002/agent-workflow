@@ -10,6 +10,16 @@
   (major1) == 0 && (major2) <  1 || \
   (major1) == 0 && (major2) == 1 && (minor) <= 0)
 #endif /* MIN_VERSION_agent_workflow */
+/* package aeson-2.2.3.0 */
+#ifndef VERSION_aeson
+#define VERSION_aeson "2.2.3.0"
+#endif /* VERSION_aeson */
+#ifndef MIN_VERSION_aeson
+#define MIN_VERSION_aeson(major1,major2,minor) (\
+  (major1) <  2 || \
+  (major1) == 2 && (major2) <  2 || \
+  (major1) == 2 && (major2) == 2 && (minor) <= 3)
+#endif /* MIN_VERSION_aeson */
 /* package base-4.18.3.0 */
 #ifndef VERSION_base
 #define VERSION_base "4.18.3.0"
@@ -20,6 +30,16 @@
   (major1) == 4 && (major2) <  18 || \
   (major1) == 4 && (major2) == 18 && (minor) <= 3)
 #endif /* MIN_VERSION_base */
+/* package bytestring-0.11.5.4 */
+#ifndef VERSION_bytestring
+#define VERSION_bytestring "0.11.5.4"
+#endif /* VERSION_bytestring */
+#ifndef MIN_VERSION_bytestring
+#define MIN_VERSION_bytestring(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  11 || \
+  (major1) == 0 && (major2) == 11 && (minor) <= 5)
+#endif /* MIN_VERSION_bytestring */
 /* package containers-0.6.7 */
 #ifndef VERSION_containers
 #define VERSION_containers "0.6.7"
@@ -30,6 +50,16 @@
   (major1) == 0 && (major2) <  6 || \
   (major1) == 0 && (major2) == 6 && (minor) <= 7)
 #endif /* MIN_VERSION_containers */
+/* package http-conduit-2.3.9.1 */
+#ifndef VERSION_http_conduit
+#define VERSION_http_conduit "2.3.9.1"
+#endif /* VERSION_http_conduit */
+#ifndef MIN_VERSION_http_conduit
+#define MIN_VERSION_http_conduit(major1,major2,minor) (\
+  (major1) <  2 || \
+  (major1) == 2 && (major2) <  3 || \
+  (major1) == 2 && (major2) == 3 && (minor) <= 9)
+#endif /* MIN_VERSION_http_conduit */
 /* package parsec-3.1.16.1 */
 #ifndef VERSION_parsec
 #define VERSION_parsec "3.1.16.1"
@@ -40,6 +70,26 @@
   (major1) == 3 && (major2) <  1 || \
   (major1) == 3 && (major2) == 1 && (minor) <= 16)
 #endif /* MIN_VERSION_parsec */
+/* package text-2.0.2 */
+#ifndef VERSION_text
+#define VERSION_text "2.0.2"
+#endif /* VERSION_text */
+#ifndef MIN_VERSION_text
+#define MIN_VERSION_text(major1,major2,minor) (\
+  (major1) <  2 || \
+  (major1) == 2 && (major2) <  0 || \
+  (major1) == 2 && (major2) == 0 && (minor) <= 2)
+#endif /* MIN_VERSION_text */
+/* package vector-0.13.2.0 */
+#ifndef VERSION_vector
+#define VERSION_vector "0.13.2.0"
+#endif /* VERSION_vector */
+#ifndef MIN_VERSION_vector
+#define MIN_VERSION_vector(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  13 || \
+  (major1) == 0 && (major2) == 13 && (minor) <= 2)
+#endif /* MIN_VERSION_vector */
 
 /* tool gcc-17.0.0 */
 #ifndef TOOL_VERSION_gcc

@@ -27,7 +27,7 @@ langDef = emptyDef
       ]
   , PT.reservedNames =
       [ "config", "agent", "from", "let", "if", "then", "else"
-      , "fail", "retry", "try", "catch"
+      , "fail", "retry", "try", "catch", "print"
       , "FixedAgent", "CustomAI", "prompt", "model"
       , "true", "false"
       , "python", "http", "llm", "mock"
@@ -156,6 +156,7 @@ stmt = P.choice
   , stmtFail
   , stmtRetry
   , stmtTryCatch
+  , stmtPrint
   ] P.<?> "statement"
 
 -- | @{ s₁ ; s₂ ; … }@ groups statements; resolved to right-nested
@@ -263,6 +264,9 @@ stmtTryCatch = do
   reserved "catch"; x  <- identifier
   reservedOp "=>" ; s2 <- stmt
   return (STryCatch s1 x s2)
+
+stmtPrint :: Parser Stmt
+stmtPrint = reserved "print" >> SPrint <$> expr
 
 -- | Top-level entry point.
 parseProgram :: FilePath -> String -> Either P.ParseError Stmt

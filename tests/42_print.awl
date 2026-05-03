@@ -1,0 +1,25 @@
+// EXPECT_OK
+// CHECK_STDOUT: hello world
+// CHECK_STDOUT: 42
+// CHECK_STDOUT: true
+// CHECK_STDOUT: {name = "alice", age = 30}
+// CHECK_STDOUT: hello world!
+// `print` is a side-effecting statement: evaluates its expression,
+// writes it to stdout, leaves the state unchanged. Strings print
+// unquoted; everything else uses the same pretty-printer the final
+// state-dump uses.
+
+print "hello world";
+print 42;
+print true;
+print { name = "alice", age = 30 };
+
+// Works on derived expressions — string concat with `+` is a binop.
+let greeting = "hello" + " " + "world!";
+print greeting;
+
+// Print arithmetic and projection results
+let x = 3 + 4;
+print x;
+let user = { name = "bob" };
+print user.name

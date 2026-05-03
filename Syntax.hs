@@ -66,4 +66,5 @@ data Stmt
   | SFail         Expr                           -- fail e
   | SRetry        Int  Stmt                      -- retry n s
   | STryCatch     Stmt String Stmt               -- try s₁ catch x => s₂
+  | SPrint        Expr                           -- print e
   deriving (Eq, Show)
