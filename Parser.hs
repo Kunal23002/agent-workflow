@@ -13,6 +13,15 @@ import           Text.Parsec.String   (Parser)
 
 import           Syntax
 
+reservedNamesList :: [String]
+reservedNamesList =
+  [ "config", "agent", "from", "let", "if", "then", "else"
+  , "fail", "retry", "try", "catch", "print"
+  , "FixedAgent", "CustomAI", "prompt", "model"
+  , "true", "false", "null"
+  , "python", "http", "llm", "mock"
+  ]
+
 -- | The lexical structure of the language.
 langDef :: PT.LanguageDef ()
 langDef = emptyDef
@@ -25,13 +34,7 @@ langDef = emptyDef
       [ "=", "==", "!=", ">", "<", ">=", "<="
       , "+", "-", "*", "/", "&&", "||", ".", "=>", ":"
       ]
-  , PT.reservedNames =
-      [ "config", "agent", "from", "let", "if", "then", "else"
-      , "fail", "retry", "try", "catch", "print"
-      , "FixedAgent", "CustomAI", "prompt", "model"
-      , "true", "false"
-      , "python", "http", "llm", "mock"
-      ]
+  , PT.reservedNames   = reservedNamesList
   , PT.caseSensitive   = True
   }
 
@@ -40,6 +43,10 @@ lexer = PT.makeTokenParser langDef
 
 identifier     :: Parser String
 identifier     = PT.identifier     lexer
+fieldName      :: Parser String
+fieldName      = identifier P.<|> P.choice (map reservedName reservedNamesList)
+  where
+    reservedName name = P.try (reserved name >> return name)
 reserved       :: String -> Parser ()
 reserved       = PT.reserved       lexer
 reservedOp     :: String -> Parser ()
@@ -88,15 +95,17 @@ opExpr = PE.buildExpressionParser table postfix
 postfix :: Parser Expr
 postfix = atom >>= go
   where
-    go e = (do reservedOp "."; f <- identifier; go (EProj e f))
+    go e = (do reservedOp "."; f <- fieldName; go (EProj e f))
            P.<|> return e
 
 atom :: Parser Expr
 atom =
         parens expr
+  P.<|> listLit
   P.<|> recordLit
   P.<|> stringLitE
   P.<|> numLitE
+  P.<|> nullLitE
   P.<|> boolLitE
   P.<|> identAtom
 
@@ -114,11 +123,21 @@ boolLitE :: Parser Expr
 boolLitE = (reserved "true"  >> return (EConst (VBool True)))
      P.<|> (reserved "false" >> return (EConst (VBool False)))
 
+nullLitE :: Parser Expr
+nullLitE = reserved "null" >> return (EConst VNull)
+
+listLit :: Parser Expr
+listLit = do
+  void (symbol "[")
+  es <- commaSep expr
+  void (symbol "]")
+  return (EList es)
+
 recordLit :: Parser Expr
 recordLit = do
   void (symbol "{")
   fs <- commaSep $ do
-    f <- identifier
+    f <- fieldName
     reservedOp "="
     e <- expr
     return (f, e)
@@ -173,7 +192,7 @@ stmtConfig = do
   reserved "config"
   void (symbol "{")
   fs <- commaSep $ do
-    c <- identifier
+    c <- fieldName
     reservedOp "="
     e <- expr
     return (c, e)
@@ -195,8 +214,9 @@ agentRhs name =
   P.<|>(do reserved "CustomAI"
            void (symbol "(")
            reserved "prompt"; reservedOp "="; pe <- expr
-           void comma
-           reserved "model" ; reservedOp "="; m  <- stringLit
+           m <- P.optionMaybe (do
+             void comma
+             reserved "model" ; reservedOp "="; stringLit)
            void (symbol ")")
            return (SAgentCustom name pe m))
 
@@ -214,20 +234,12 @@ kindP = do
   case k of
     "Planner"             -> return Planner
     "TaskSplitter"        -> return TaskSplitter
-    "Searcher"            -> return Searcher
     "Extractor"           -> return Extractor
-    "Cleaner"             -> return Cleaner
-    "Deduplicator"        -> return Deduplicator
-    "Formatter"           -> return Formatter
     "Critic"              -> return Critic
-    "FactChecker"         -> return FactChecker
-    "ConfidenceEstimator" -> return ConfidenceEstimator
     "Writer"              -> return Writer
     "Summarizer"          -> return Summarizer
-    "Rewriter"            -> return Rewriter
     "Validator"           -> return Validator
     "Guardrail"           -> return Guardrail
-    "Fallback"            -> return Fallback
     "Router"              -> return Router
     "Merger"              -> return Merger
     "Ranker"              -> return Ranker

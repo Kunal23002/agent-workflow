@@ -41,7 +41,7 @@ for t in "${TESTS[@]}"; do
     esac
   done < "$t"
 
-  out=$("$AWL" "$t" 2>&1)
+  out=$(env -u ANTHROPIC_API_KEY "$AWL" "$t" 2>&1)
   rc=$?
 
   problems=()

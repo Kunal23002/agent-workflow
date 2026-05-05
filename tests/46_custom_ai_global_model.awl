@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: model = "configured-model"
+// CHECK_STDOUT: [customAI configured-model]
+config { llm_model = "configured-model" };
+agent S = CustomAI(prompt = "Summarize");
+let r = S("text")

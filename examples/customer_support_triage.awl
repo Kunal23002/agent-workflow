@@ -3,7 +3,6 @@ config {
   llm_model = "claude-opus-4-7"
 };
 
-agent Clean      = FixedAgent(Cleaner);
 agent Guard      = FixedAgent(Guardrail);
 agent Extract    = FixedAgent(Extractor);
 agent Route      = FixedAgent(Router);
@@ -14,8 +13,7 @@ agent Summarize  = FixedAgent(Summarizer);
 
 let ticket = "Customer says their subscription was charged twice after upgrading to the Pro plan. They are frustrated and want a refund or account credit. Order ID: ORD-88421. Email: customer@example.com.";
 
-let cleaned    = Clean(ticket);
-let safety     = Guard(cleaned.output);
+let safety     = Guard(ticket);
 let facts      = Extract(safety.output);
 let route      = Route(facts.output);
 let draft      = Draft({ route = route.output, facts = facts.output, original_ticket = ticket });
@@ -23,8 +21,6 @@ let validation = Validate(draft.output);
 let critique   = Critique(validation.output);
 let summary    = Summarize({ route = route.output, draft = draft.output, critique = critique.output });
 
-print "--- cleaned ticket ---";
-print cleaned.output;
 print "--- safety check ---";
 print safety.output;
 print "--- extracted facts ---";

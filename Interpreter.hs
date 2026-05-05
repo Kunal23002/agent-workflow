@@ -12,14 +12,16 @@ module Interpreter
   , EResult(..)
     -- * Pretty printing
   , showVal
+  , valueToJsonText
   ) where
 
 import           Control.Exception          (SomeException, try)
-import           Data.Char                  (isSpace, toLower, toUpper)
-import           Data.List                  (intercalate, isInfixOf, nub)
+import           Data.Char                  (isSpace, toLower)
+import           Data.List                  (intercalate, isInfixOf)
 import qualified Data.Map.Strict            as Map
 import           Data.Map.Strict            (Map)
 import qualified Data.Aeson                 as A
+import qualified Data.Aeson.Key             as K
 import qualified Data.Aeson.KeyMap          as KM
 import qualified Data.ByteString.Char8      as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
@@ -45,7 +47,7 @@ type ConfigEnv = Map String Value
 data AgentDef
   = ADBackend Backend                     -- backend(b)
   | ADFixed   Kind                        -- fixed(k)
-  | ADCustom  Value String                -- custom(prompt, m)
+  | ADCustom  Value (Maybe String)        -- custom(prompt, m)
   deriving (Eq, Show)
 
 data EvalState = EvalState
@@ -102,6 +104,10 @@ evalExpr st (ERecord fs) = go fs []
   where
     go []         acc = okE (VRecord (reverse acc))
     go ((f,e):rs) acc = evalExpr st e `bindE` \v -> go rs ((f,v):acc)
+evalExpr st (EList es) = go es []
+  where
+    go []     acc = okE (VList (reverse acc))
+    go (e:rs) acc = evalExpr st e `bindE` \v -> go rs (v:acc)
 -- (E-Op)
 evalExpr st (EBin op e1 e2) =
   evalExpr st e1 `bindE` \v1 ->
@@ -110,15 +116,33 @@ evalExpr st (EBin op e1 e2) =
       Just v  -> okE v
       Nothing -> errE (VString ("type error in operator " ++ show op))
 -- (E-Agent-*) selected from the registered agent definition
-evalExpr st (ECall name es) = case Map.lookup name (sAgent st) of
-  Nothing  -> errE (VString ("unknown agent: " ++ name))
-  Just def -> evalArgs st es `bindE` \vs -> applyAgent st def vs
+evalExpr st (ECall name es)
+  | isBuiltin name = evalArgs st es `bindE` runBuiltin name
+  | otherwise = case Map.lookup name (sAgent st) of
+      Nothing  -> errE (VString ("unknown agent: " ++ name))
+      Just def -> evalArgs st es `bindE` \vs -> applyAgent st def vs
 
 evalArgs :: EvalState -> [Expr] -> EvalIO [Value]
 evalArgs _  []     = okE []
 evalArgs st (e:es) =
   evalExpr st e  `bindE` \v  ->
   evalArgs st es `bindE` \vs -> okE (v:vs)
+
+isBuiltin :: String -> Bool
+isBuiltin name = name `elem` ["parse_json", "stringify", "to_json"]
+
+runBuiltin :: String -> [Value] -> EvalIO Value
+runBuiltin "parse_json" [VString s] =
+  case parseJsonValue s of
+    Right v  -> okE v
+    Left err -> errE (VString ("parse_json failed: " ++ err))
+runBuiltin "parse_json" [_] = errE (VString "parse_json expects a string")
+runBuiltin "parse_json" _   = errE (VString "parse_json expects exactly one argument")
+runBuiltin "stringify" [v] = okE (VString (valueToJsonText v))
+runBuiltin "stringify" _   = errE (VString "stringify expects exactly one argument")
+runBuiltin "to_json" [v] = okE (VString (valueToJsonText v))
+runBuiltin "to_json" _   = errE (VString "to_json expects exactly one argument")
+runBuiltin name _ = errE (VString ("unknown builtin: " ++ name))
 
 -- | The semantic content of @⊕(v₁, v₂)@.
 applyBinOp :: BinOp -> Value -> Value -> Maybe Value
@@ -155,7 +179,7 @@ applyAgent _  (ADCustom  _    _)   _   =
 --   are observable in tests.  The llm dispatcher and CustomAI optionally
 --   route to a real Claude call when @config { real_llm = true }@ is set
 --   in the program AND ANTHROPIC_API_KEY is present in the environment;
---   otherwise it falls back to the deterministic stub.
+--   otherwise fallback must be explicitly allowed in config.
 runBackend :: ConfigEnv -> Backend -> [Value] -> EvalIO Value
 runBackend _   (BMock v)   _  = okE v
 runBackend _   (BPython f) vs = do
@@ -166,52 +190,55 @@ runBackend _   (BHttp u) vs = do
   okE (synthRecord "http" u vs)
 runBackend cfg (BLlm m) vs = do
   putStrLn $ "[llm    " ++ m ++ "] " ++ showArgs vs
-  let prompt = intercalate "\n\n" (map valueText vs)
+  let prompt = intercalate "\n\n" (map llmPromptText vs)
       mkResponse txt = VRecord
         [ ("backend",  VString "llm")
         , ("model",    VString m)
         , ("prompt",   VString prompt)
         , ("response", VString txt)
+        , ("output",   llmOutputValue txt)
+        , ("raw_output", VString txt)
         ]
-  liveOk <- liveLlmEnabled cfg
-  case liveOk of
-    Nothing  -> okE (mkResponse ("(simulated " ++ m ++ " response)"))
-    Just key -> do
+  llmAccess cfg `bindE` \mode -> case mode of
+    LlmStub    -> okE (mkResponse ("(simulated " ++ m ++ " response)"))
+    LlmLive key -> do
       r <- callClaude key m prompt
       case r of
         Right txt -> okE (mkResponse txt)
         Left err  -> errE (VString ("LLM call failed: " ++ err))
 
 -- | (E-Agent-Custom) — optional real call when opted in via config.
-runLLM :: ConfigEnv -> String -> Value -> Value -> EvalIO Value
-runLLM cfg model prompt input = do
+runLLM :: ConfigEnv -> Maybe String -> Value -> Value -> EvalIO Value
+runLLM cfg modelOverride prompt input = do
+  let model = maybe (workflowModel cfg) id modelOverride
   putStrLn $ "[customAI " ++ model ++ "] prompt=" ++ showVal prompt
                               ++ " input=" ++ showVal input
-  liveOk <- liveLlmEnabled cfg
-  case liveOk of
-    Nothing  -> okE (VRecord
+  llmAccess cfg `bindE` \mode -> case mode of
+    LlmStub -> okE (VRecord
       [ ("model",  VString model)
       , ("prompt", prompt)
       , ("input",  input)
       , ("output", VString ("(simulated " ++ model ++ " response)"))
+      , ("raw_output", VString ("(simulated " ++ model ++ " response)"))
       ])
-    Just key -> do
-      r <- callClaudeWithSystem key model (valueText prompt) (valueText input)
+    LlmLive key -> do
+      r <- callClaudeWithSystem key model (valueText prompt) (llmPromptText input)
       case r of
         Right txt -> okE (VRecord
           [ ("model",  VString model)
           , ("prompt", prompt)
           , ("input",  input)
-          , ("output", VString txt)
+          , ("output", llmOutputValue txt)
+          , ("raw_output", VString txt)
           ])
         Left err  -> errE (VString ("CustomAI call failed: " ++ err))
 
 runFixedWorkflow :: ConfigEnv -> Kind -> [Value] -> EvalIO Value
-runFixedWorkflow cfg k vs = do
-  liveOk <- liveLlmEnabled cfg
-  case liveOk of
-    Nothing  -> okE (withOutput (runFixed k vs))
-    Just key -> runFixedLLM cfg key k vs
+runFixedWorkflow _ Merger vs = okE (withWorkflowOutput Merger (runFixed Merger vs))
+runFixedWorkflow cfg k vs =
+  llmAccess cfg `bindE` \mode -> case mode of
+    LlmStub     -> okE (withWorkflowOutput k (runFixed k vs))
+    LlmLive key -> runFixedLLM cfg key k vs
 
 runFixedLLM :: ConfigEnv -> String -> Kind -> [Value] -> EvalIO Value
 runFixedLLM cfg apiKey k vs = do
@@ -228,7 +255,8 @@ runFixedLLM cfg apiKey k vs = do
       , ("system", VString systemPrompt)
       , ("input",  VRecord (zip [ "arg" ++ show i | i <- [0 :: Int ..] ] vs))
       , ("format", VString format)
-      , ("output", VString txt)
+      , ("output", llmOutputValue txt)
+      , ("raw_output", VString txt)
       ])
     Left err -> errE (VString ("FixedAgent " ++ show k ++ " call failed: " ++ err))
 
@@ -252,20 +280,12 @@ workflowSystemPrompt k = intercalate "\n"
 workflowRole :: Kind -> String
 workflowRole Planner             = "You are a planning agent. Turn a goal into a concrete execution plan."
 workflowRole TaskSplitter        = "You are a task splitting agent. Break work into small ordered tasks."
-workflowRole Searcher            = "You are a search agent. Produce focused search queries and useful source targets."
 workflowRole Extractor           = "You are an extraction agent. Pull out the key structured facts from the input."
-workflowRole Cleaner             = "You are a cleaning agent. Normalize noisy input while preserving meaning."
-workflowRole Deduplicator        = "You are a deduplication agent. Remove repeated ideas and keep unique information."
-workflowRole Formatter           = "You are a formatting agent. Convert input into a clean downstream format."
 workflowRole Critic              = "You are a critic agent. Evaluate quality, identify weaknesses, and score the input."
-workflowRole FactChecker         = "You are a fact checking agent. Check factual reliability and list questionable claims."
-workflowRole ConfidenceEstimator = "You are a confidence estimation agent. Estimate how reliable the input is."
 workflowRole Writer              = "You are a writing agent. Produce a polished draft from the input."
 workflowRole Summarizer          = "You are a summarization agent. Produce a concise summary of the input."
-workflowRole Rewriter            = "You are a rewriting agent. Improve clarity, style, and structure."
 workflowRole Validator           = "You are a validation agent. Decide whether the input is complete, usable, and schema-compliant."
 workflowRole Guardrail           = "You are a guardrail agent. Check safety, privacy, and policy risks."
-workflowRole Fallback            = "You are a fallback agent. Provide a safe alternative when upstream output is missing or weak."
 workflowRole Router              = "You are a router agent. Choose the best next workflow route."
 workflowRole Merger              = "You are a merge agent. Combine multiple upstream inputs into one coherent object."
 workflowRole Ranker              = "You are a ranking agent. Rank multiple options by usefulness."
@@ -273,20 +293,12 @@ workflowRole Ranker              = "You are a ranking agent. Rank multiple optio
 workflowFormat :: Kind -> String
 workflowFormat Planner             = "{\"goal\":\"...\",\"steps\":[\"...\"],\"dependencies\":[\"...\"],\"next_input\":\"...\"}"
 workflowFormat TaskSplitter        = "{\"tasks\":[{\"id\":1,\"task\":\"...\",\"input\":\"...\"}],\"next_input\":\"...\"}"
-workflowFormat Searcher            = "{\"queries\":[\"...\"],\"sources\":[\"...\"],\"next_input\":\"...\"}"
 workflowFormat Extractor           = "{\"facts\":[\"...\"],\"entities\":[\"...\"],\"next_input\":\"...\"}"
-workflowFormat Cleaner             = "{\"cleaned\":\"...\",\"changes\":[\"...\"],\"next_input\":\"...\"}"
-workflowFormat Deduplicator        = "{\"unique_items\":[\"...\"],\"removed\":[\"...\"],\"next_input\":\"...\"}"
-workflowFormat Formatter           = "{\"formatted\":\"...\",\"format\":\"...\",\"next_input\":\"...\"}"
 workflowFormat Critic              = "{\"score\":0.0,\"issues\":[\"...\"],\"recommendations\":[\"...\"],\"next_input\":\"...\"}"
-workflowFormat FactChecker         = "{\"verified\":true,\"claims\":[{\"claim\":\"...\",\"status\":\"...\"}],\"next_input\":\"...\"}"
-workflowFormat ConfidenceEstimator = "{\"confidence\":0.0,\"reasons\":[\"...\"],\"next_input\":\"...\"}"
 workflowFormat Writer              = "{\"draft\":\"...\",\"next_input\":\"...\"}"
 workflowFormat Summarizer          = "{\"summary\":\"...\",\"key_points\":[\"...\"],\"next_input\":\"...\"}"
-workflowFormat Rewriter            = "{\"rewritten\":\"...\",\"improvements\":[\"...\"],\"next_input\":\"...\"}"
 workflowFormat Validator           = "{\"valid\":true,\"issues\":[\"...\"],\"fixed_input\":\"...\",\"next_input\":\"...\"}"
 workflowFormat Guardrail           = "{\"safe\":true,\"risks\":[\"...\"],\"redacted_input\":\"...\",\"next_input\":\"...\"}"
-workflowFormat Fallback            = "{\"fallback\":\"...\",\"reason\":\"...\",\"next_input\":\"...\"}"
 workflowFormat Router              = "{\"route\":\"...\",\"reason\":\"...\",\"next_input\":\"...\"}"
 workflowFormat Merger              = "{\"merged\":\"...\",\"sources_used\":[\"...\"],\"next_input\":\"...\"}"
 workflowFormat Ranker              = "{\"ranked\":[{\"rank\":1,\"item\":\"...\",\"reason\":\"...\"}],\"next_input\":\"...\"}"
@@ -294,23 +306,51 @@ workflowFormat Ranker              = "{\"ranked\":[{\"rank\":1,\"item\":\"...\",
 workflowInput :: [Value] -> String
 workflowInput [] = "No inputs."
 workflowInput vs = intercalate "\n"
-  [ "arg" ++ show i ++ ": " ++ valueText v
+  [ "arg" ++ show i ++ ": " ++ llmPromptText v
   | (i, v) <- zip [0 :: Int ..] vs
   ]
 
-withOutput :: Value -> Value
-withOutput v@(VRecord fs)
+withWorkflowOutput :: Kind -> Value -> Value
+withWorkflowOutput k v@(VRecord fs)
   | any ((== "output") . fst) fs = v
-  | otherwise                    = VRecord (fs ++ [("output", VString (showVal v))])
-withOutput v = VRecord [("value", v), ("output", VString (valueText v))]
+  | otherwise                    = VRecord (fs ++ [("output", workflowDefaultOutput k v)])
+withWorkflowOutput _ v = VRecord [("value", v), ("output", v)]
 
--- | Returns @Just apiKey@ when the program opted in via
---   @config { real_llm = true }@ and ANTHROPIC_API_KEY is set;
---   otherwise @Nothing@ (use the stub).
-liveLlmEnabled :: ConfigEnv -> IO (Maybe String)
-liveLlmEnabled cfg = case Map.lookup "real_llm" cfg of
-  Just (VBool True) -> lookupEnv "ANTHROPIC_API_KEY"
-  _                 -> pure Nothing
+workflowDefaultOutput :: Kind -> Value -> Value
+workflowDefaultOutput Planner             = id
+workflowDefaultOutput TaskSplitter        = fieldOrSelf "tasks"
+workflowDefaultOutput Extractor           = fieldOrSelf "extracted"
+workflowDefaultOutput Critic              = fieldOrSelf "critique"
+workflowDefaultOutput Writer              = fieldOrSelf "draft"
+workflowDefaultOutput Summarizer          = fieldOrSelf "summary"
+workflowDefaultOutput Validator           = fieldOrSelf "payload"
+workflowDefaultOutput Guardrail           = fieldOrSelf "payload"
+workflowDefaultOutput Router              = fieldOrSelf "route"
+workflowDefaultOutput Merger              = fieldOrSelf "merged"
+workflowDefaultOutput Ranker              = fieldOrSelf "ranked"
+
+fieldOrSelf :: String -> Value -> Value
+fieldOrSelf f v@(VRecord fs) = maybe v id (lookup f fs)
+fieldOrSelf _ v              = v
+
+data LlmAccess = LlmStub | LlmLive String
+
+llmAccess :: ConfigEnv -> EvalIO LlmAccess
+llmAccess cfg = case Map.lookup "real_llm" cfg of
+  Just (VBool True) -> do
+    mKey <- lookupEnv "ANTHROPIC_API_KEY"
+    case mKey of
+      Just key | not (null key) -> okE (LlmLive key)
+      _ | llmStubAllowed cfg -> do
+            putStrLn "[warn] real_llm = true but ANTHROPIC_API_KEY is not set; using deterministic stubs"
+            okE LlmStub
+        | otherwise -> errE (VString "real_llm is true but ANTHROPIC_API_KEY is not set; export ANTHROPIC_API_KEY or set allow_llm_fallback = true")
+  _ -> okE LlmStub
+
+llmStubAllowed :: ConfigEnv -> Bool
+llmStubAllowed cfg =
+  Map.lookup "allow_llm_fallback" cfg == Just (VBool True) ||
+  Map.lookup "allow_stub_fallback" cfg == Just (VBool True)
 
 -- | Single-shot Claude Messages API call. Raw HTTP — no Haskell SDK exists.
 --   See https://docs.claude.com/en/api/messages
@@ -363,14 +403,45 @@ extractText (A.Object obj) = do
     _ -> Nothing
 extractText _ = Nothing
 
+llmOutputValue :: String -> Value
+llmOutputValue txt =
+  case parseJsonValue txt of
+    Right v -> v
+    Left _  -> VString txt
+
+parseJsonValue :: String -> Either String Value
+parseJsonValue txt = jsonToValue <$> A.eitherDecode (LBS.pack txt)
+
+jsonToValue :: A.Value -> Value
+jsonToValue (A.String t) = VString (T.unpack t)
+jsonToValue (A.Number n) = VNumber (realToFrac n)
+jsonToValue (A.Bool b)   = VBool b
+jsonToValue A.Null       = VNull
+jsonToValue (A.Array a)  = VList (map jsonToValue (V.toList a))
+jsonToValue (A.Object o) =
+  VRecord [ (K.toString k, jsonToValue v) | (k, v) <- KM.toList o ]
+
+valueToJsonText :: Value -> String
+valueToJsonText = LBS.unpack . A.encode . valueToJson
+
+valueToJson :: Value -> A.Value
+valueToJson (VString s)  = A.String (T.pack s)
+valueToJson (VNumber n)  = A.toJSON n
+valueToJson (VBool b)    = A.Bool b
+valueToJson (VList vs)   = A.Array (V.fromList (map valueToJson vs))
+valueToJson (VRecord fs) =
+  A.Object (KM.fromList [ (K.fromString k, valueToJson v) | (k, v) <- fs ])
+valueToJson VNull        = A.Null
+
 synthRecord :: String -> String -> [Value] -> Value
 synthRecord backend target vs = VRecord
   [ ("backend", VString backend)
   , ("target",  VString target)
   , ("args",    VRecord (zip [ "arg" ++ show i | i <- [0 :: Int ..] ] vs))
+  , ("output",  VRecord (zip [ "arg" ++ show i | i <- [0 :: Int ..] ] vs))
   ]
 
--- | Stubs for the 18 fixed agent kinds.  They do not call any model;
+-- | Stubs for the 11 fixed agent kinds.  They do not call any model;
 --   they package their inputs into a structured response so workflows
 --   are deterministic in tests.
 runFixed :: Kind -> [Value] -> Value
@@ -390,17 +461,15 @@ valueText :: Value -> String
 valueText (VString s) = s
 valueText v           = showVal v
 
+llmPromptText :: Value -> String
+llmPromptText (VString s) = s
+llmPromptText v           = valueToJsonText v
+
 trimStr :: String -> String
 trimStr = f . f where f = dropWhile isSpace . reverse
 
 lowerStr :: String -> String
 lowerStr = map toLower
-
-capitalizeWords :: String -> String
-capitalizeWords = unwords . map cap . words
-  where
-    cap []     = []
-    cap (c:cs) = toUpper c : cs
 
 splitOnChar :: Char -> String -> [String]
 splitOnChar c s = case break (== c) s of
@@ -433,18 +502,6 @@ runFixedOne TaskSplitter v =
        , ("tasks", VRecord (zip [show (i :: Int) | i <- [0..]]
                                 (map VString tasks)))
        ]
--- Synthesise three deterministic "hits" that incorporate the query string.
-runFixedOne Searcher v =
-  let q = valueText v
-  in VRecord
-       [ ("query", v)
-       , ("count", VNumber 3)
-       , ("hits", VRecord
-           [ ("0", VString (q ++ " — primary source"))
-           , ("1", VString (q ++ " — review article"))
-           , ("2", VString (q ++ " — community discussion"))
-           ])
-       ]
 -- Extract first 5 words of the source.
 runFixedOne Extractor v =
   let txt   = valueText v
@@ -454,26 +511,6 @@ runFixedOne Extractor v =
        , ("extracted",  VString (unwords first))
        , ("word_count", VNumber (fromIntegral (length first)))
        ]
--- Real cleaning: trim whitespace, lowercase, collapse internal whitespace.
-runFixedOne Cleaner v =
-  let txt     = valueText v
-      cleaned = unwords (words (lowerStr txt))
-  in VRecord
-       [ ("input",   v)
-       , ("cleaned", VString cleaned)
-       ]
--- Deduplicate words while preserving order.
-runFixedOne Deduplicator v =
-  let txt     = valueText v
-      ws      = words txt
-      uniq    = nub ws
-      removed = length ws - length uniq
-  in VRecord
-       [ ("input",   v)
-       , ("deduped", VString (unwords uniq))
-       , ("removed", VNumber (fromIntegral removed))
-       ]
-runFixedOne Formatter v = VRecord [("formatted", VString (showVal v))]
 -- Score derived from content: high by default, drops if negative keywords appear.
 runFixedOne Critic v =
   let txt    = lowerStr (valueText v)
@@ -491,34 +528,8 @@ runFixedOne Critic v =
        , ("critique",   VString crit)
        , ("score",      VNumber score)
        ]
--- Heuristic check: claims containing negation/falsehood markers fail.
-runFixedOne FactChecker v =
-  let txt = lowerStr (valueText v)
-      neg = any (`isInfixOf` txt) [" not ", " never ", "false", "untrue"]
-  in VRecord
-       [ ("claim",    v)
-       , ("verified", VBool (not neg))
-       , ("reason",   VString (if neg then "contains negation/contradiction"
-                                       else "no contradictions found"))
-       ]
--- Confidence scales with content length, capped at 1.0.
-runFixedOne ConfidenceEstimator v =
-  let ws   = length (words (valueText v))
-      conf = min 1.0 (fromIntegral ws / 30.0)
-  in VRecord
-       [ ("input",      v)
-       , ("word_count", VNumber (fromIntegral ws))
-       , ("confidence", VNumber conf)
-       ]
 runFixedOne Writer     v = VRecord [("draft",   VString ("draft about: " ++ showVal v))]
 runFixedOne Summarizer v = VRecord [("summary", VString (truncate' 80 (showVal v)))]
--- Capitalise the first letter of each word.
-runFixedOne Rewriter v =
-  let txt = valueText v
-  in VRecord
-       [ ("original",  v)
-       , ("rewritten", VString (capitalizeWords txt))
-       ]
 -- Valid iff the input has at least one non-whitespace character.
 runFixedOne Validator v =
   let ok = not (null (trimStr (valueText v)))
@@ -539,10 +550,6 @@ runFixedOne Guardrail v =
        , ("reason",  VString (if safe then "no sensitive keywords"
                                        else "contains: " ++ intercalate ", " hits))
        ]
-runFixedOne Fallback v = VRecord
-  [ ("input",    v)
-  , ("fallback", VString "(no primary result, using fallback)")
-  ]
 -- Pick a route from keywords found in the input.
 runFixedOne Router v =
   let txt   = lowerStr (valueText v)
@@ -631,8 +638,10 @@ showVal (VNumber n)
   | fromInteger (floor n :: Integer) == n = show (floor n :: Integer)
   | otherwise                             = show n
 showVal (VBool   b)  = if b then "true" else "false"
+showVal (VList vs)   = "[" ++ intercalate ", " (map showVal vs) ++ "]"
 showVal (VRecord fs) =
   "{" ++ intercalate ", " [ f ++ " = " ++ showVal v | (f,v) <- fs ] ++ "}"
+showVal VNull        = "null"
 
 showArgs :: [Value] -> String
 showArgs vs = "[" ++ intercalate ", " (map showVal vs) ++ "]"

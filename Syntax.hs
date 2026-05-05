@@ -18,7 +18,9 @@ data Value
   = VString String
   | VNumber Double
   | VBool   Bool
+  | VList   [Value]
   | VRecord [(String, Value)]
+  | VNull
   deriving (Eq, Show)
 
 -- | Binary operators: e₁ ⊕ e₂  (>, <, ==, +, …)
@@ -35,6 +37,7 @@ data Expr
   | EProj   Expr String                 -- e.f
   | ECall   String [Expr]               -- A(e₁, …, eₙ)
   | EBin    BinOp Expr Expr             -- e₁ ⊕ e₂
+  | EList   [Expr]
   | ERecord [(String, Expr)]            -- { fᵢ = eᵢ }
   deriving (Eq, Show)
 
@@ -48,10 +51,9 @@ data Backend
 
 -- | Fixed agent kinds  (k ::= Planner | TaskSplitter | …)
 data Kind
-  = Planner | TaskSplitter | Searcher | Extractor | Cleaner
-  | Deduplicator | Formatter | Critic | FactChecker
-  | ConfidenceEstimator | Writer | Summarizer | Rewriter
-  | Validator | Guardrail | Fallback | Router | Merger | Ranker
+  = Planner | TaskSplitter | Extractor | Critic
+  | Writer | Summarizer | Validator | Guardrail
+  | Router | Merger | Ranker
   deriving (Eq, Show, Bounded, Enum)
 
 -- | Statements  (s ::= …)
@@ -59,7 +61,7 @@ data Stmt
   = SConfig       [(String, Expr)]              -- config { c = e, … }
   | SAgentBackend String Backend                 -- agent A from b
   | SAgentFixed   String Kind                    -- agent A = FixedAgent(k)
-  | SAgentCustom  String Expr String             -- agent A = CustomAI(prompt = e, model = m)
+  | SAgentCustom  String Expr (Maybe String)     -- agent A = CustomAI(prompt = e, model = m)
   | SLet          String Expr                    -- let x = e
   | SIf           Expr Stmt Stmt                 -- if e then s₁ else s₂
   | SSeq          Stmt Stmt                      -- s₁ ; s₂

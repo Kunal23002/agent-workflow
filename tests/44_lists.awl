@@ -1,0 +1,5 @@
+// EXPECT_OK
+// CHECK: xs = ["a", 2, true, null]
+// CHECK: json = "[\"a\",2,true,null]"
+let xs = ["a", 2, true, null];
+let json = stringify(xs)

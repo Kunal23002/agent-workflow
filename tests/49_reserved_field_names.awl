@@ -1,0 +1,8 @@
+// EXPECT_OK
+// CHECK: model = "reserved-model"
+// CHECK: picked = "reserved-model"
+// CHECK_STDOUT: [customAI reserved-model]
+config { model = "reserved-model" };
+agent S = CustomAI(prompt = "Summarize");
+let r = S("text");
+let result = { model = r.model, picked = r.model }
