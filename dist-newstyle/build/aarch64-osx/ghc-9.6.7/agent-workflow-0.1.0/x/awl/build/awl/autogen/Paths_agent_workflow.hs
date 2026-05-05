@@ -46,12 +46,12 @@ getBinDir, getLibDir, getDynLibDir, getDataDir, getLibexecDir, getSysconfDir :: 
 
 
 bindir, libdir, dynlibdir, datadir, libexecdir, sysconfdir :: FilePath
-bindir     = "/Users/gautamsmac/.cabal/bin"
-libdir     = "/Users/gautamsmac/.cabal/lib/aarch64-osx-ghc-9.6.7/agent-workflow-0.1.0-inplace-awl"
-dynlibdir  = "/Users/gautamsmac/.cabal/lib/aarch64-osx-ghc-9.6.7"
-datadir    = "/Users/gautamsmac/.cabal/share/aarch64-osx-ghc-9.6.7/agent-workflow-0.1.0"
-libexecdir = "/Users/gautamsmac/.cabal/libexec/aarch64-osx-ghc-9.6.7/agent-workflow-0.1.0"
-sysconfdir = "/Users/gautamsmac/.cabal/etc"
+bindir     = "/Users/ankushc/.cabal/bin"
+libdir     = "/Users/ankushc/.cabal/lib/aarch64-osx-ghc-9.6.7/agent-workflow-0.1.0-inplace-awl"
+dynlibdir  = "/Users/ankushc/.cabal/lib/aarch64-osx-ghc-9.6.7"
+datadir    = "/Users/ankushc/.cabal/share/aarch64-osx-ghc-9.6.7/agent-workflow-0.1.0"
+libexecdir = "/Users/ankushc/.cabal/libexec/aarch64-osx-ghc-9.6.7/agent-workflow-0.1.0"
+sysconfdir = "/Users/ankushc/.cabal/etc"
 
 getBinDir     = catchIO (getEnv "agent_workflow_bindir")     (\_ -> return bindir)
 getLibDir     = catchIO (getEnv "agent_workflow_libdir")     (\_ -> return libdir)

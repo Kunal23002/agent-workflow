@@ -143,7 +143,7 @@ applyBinOp _ _ _                         = Nothing
 
 applyAgent :: EvalState -> AgentDef -> [Value] -> EvalIO Value
 applyAgent st (ADBackend b)        vs  = runBackend (sConfig st) b vs
-applyAgent _  (ADFixed   k)        vs  = okE (runFixed k vs)
+applyAgent st (ADFixed   k)        vs  = runFixedWorkflow (sConfig st) k vs
 applyAgent st (ADCustom  pmpt m)  [v]  = runLLM (sConfig st) m pmpt v
 applyAgent _  (ADCustom  _    _)   _   =
   errE (VString "CustomAI agent expects exactly one argument")
@@ -196,8 +196,7 @@ runLLM cfg model prompt input = do
       , ("output", VString ("(simulated " ++ model ++ " response)"))
       ])
     Just key -> do
-      let combined = valueText prompt ++ "\n\n" ++ valueText input
-      r <- callClaude key model combined
+      r <- callClaudeWithSystem key model (valueText prompt) (valueText input)
       case r of
         Right txt -> okE (VRecord
           [ ("model",  VString model)
@@ -206,6 +205,104 @@ runLLM cfg model prompt input = do
           , ("output", VString txt)
           ])
         Left err  -> errE (VString ("CustomAI call failed: " ++ err))
+
+runFixedWorkflow :: ConfigEnv -> Kind -> [Value] -> EvalIO Value
+runFixedWorkflow cfg k vs = do
+  liveOk <- liveLlmEnabled cfg
+  case liveOk of
+    Nothing  -> okE (withOutput (runFixed k vs))
+    Just key -> runFixedLLM cfg key k vs
+
+runFixedLLM :: ConfigEnv -> String -> Kind -> [Value] -> EvalIO Value
+runFixedLLM cfg apiKey k vs = do
+  let model        = workflowModel cfg
+      systemPrompt = workflowSystemPrompt k
+      input        = workflowInput vs
+      format       = workflowFormat k
+  putStrLn $ "[agent  " ++ show k ++ " " ++ model ++ "] " ++ showArgs vs
+  r <- callClaudeWithSystem apiKey model systemPrompt input
+  case r of
+    Right txt -> okE (VRecord
+      [ ("kind",   VString (show k))
+      , ("model",  VString model)
+      , ("system", VString systemPrompt)
+      , ("input",  VRecord (zip [ "arg" ++ show i | i <- [0 :: Int ..] ] vs))
+      , ("format", VString format)
+      , ("output", VString txt)
+      ])
+    Left err -> errE (VString ("FixedAgent " ++ show k ++ " call failed: " ++ err))
+
+workflowModel :: ConfigEnv -> String
+workflowModel cfg =
+  case Map.lookup "llm_model" cfg of
+    Just (VString m) -> m
+    _ -> case Map.lookup "model" cfg of
+      Just (VString m) -> m
+      _                -> "claude-opus-4-7"
+
+workflowSystemPrompt :: Kind -> String
+workflowSystemPrompt k = intercalate "\n"
+  [ workflowRole k
+  , "You are one node in an AWL workflow graph, similar to an n8n node."
+  , "Transform the input into the required schema so the next node can consume it."
+  , "Return only valid JSON. Do not wrap the JSON in markdown."
+  , "Schema: " ++ workflowFormat k
+  ]
+
+workflowRole :: Kind -> String
+workflowRole Planner             = "You are a planning agent. Turn a goal into a concrete execution plan."
+workflowRole TaskSplitter        = "You are a task splitting agent. Break work into small ordered tasks."
+workflowRole Searcher            = "You are a search agent. Produce focused search queries and useful source targets."
+workflowRole Extractor           = "You are an extraction agent. Pull out the key structured facts from the input."
+workflowRole Cleaner             = "You are a cleaning agent. Normalize noisy input while preserving meaning."
+workflowRole Deduplicator        = "You are a deduplication agent. Remove repeated ideas and keep unique information."
+workflowRole Formatter           = "You are a formatting agent. Convert input into a clean downstream format."
+workflowRole Critic              = "You are a critic agent. Evaluate quality, identify weaknesses, and score the input."
+workflowRole FactChecker         = "You are a fact checking agent. Check factual reliability and list questionable claims."
+workflowRole ConfidenceEstimator = "You are a confidence estimation agent. Estimate how reliable the input is."
+workflowRole Writer              = "You are a writing agent. Produce a polished draft from the input."
+workflowRole Summarizer          = "You are a summarization agent. Produce a concise summary of the input."
+workflowRole Rewriter            = "You are a rewriting agent. Improve clarity, style, and structure."
+workflowRole Validator           = "You are a validation agent. Decide whether the input is complete, usable, and schema-compliant."
+workflowRole Guardrail           = "You are a guardrail agent. Check safety, privacy, and policy risks."
+workflowRole Fallback            = "You are a fallback agent. Provide a safe alternative when upstream output is missing or weak."
+workflowRole Router              = "You are a router agent. Choose the best next workflow route."
+workflowRole Merger              = "You are a merge agent. Combine multiple upstream inputs into one coherent object."
+workflowRole Ranker              = "You are a ranking agent. Rank multiple options by usefulness."
+
+workflowFormat :: Kind -> String
+workflowFormat Planner             = "{\"goal\":\"...\",\"steps\":[\"...\"],\"dependencies\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat TaskSplitter        = "{\"tasks\":[{\"id\":1,\"task\":\"...\",\"input\":\"...\"}],\"next_input\":\"...\"}"
+workflowFormat Searcher            = "{\"queries\":[\"...\"],\"sources\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Extractor           = "{\"facts\":[\"...\"],\"entities\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Cleaner             = "{\"cleaned\":\"...\",\"changes\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Deduplicator        = "{\"unique_items\":[\"...\"],\"removed\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Formatter           = "{\"formatted\":\"...\",\"format\":\"...\",\"next_input\":\"...\"}"
+workflowFormat Critic              = "{\"score\":0.0,\"issues\":[\"...\"],\"recommendations\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat FactChecker         = "{\"verified\":true,\"claims\":[{\"claim\":\"...\",\"status\":\"...\"}],\"next_input\":\"...\"}"
+workflowFormat ConfidenceEstimator = "{\"confidence\":0.0,\"reasons\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Writer              = "{\"draft\":\"...\",\"next_input\":\"...\"}"
+workflowFormat Summarizer          = "{\"summary\":\"...\",\"key_points\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Rewriter            = "{\"rewritten\":\"...\",\"improvements\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Validator           = "{\"valid\":true,\"issues\":[\"...\"],\"fixed_input\":\"...\",\"next_input\":\"...\"}"
+workflowFormat Guardrail           = "{\"safe\":true,\"risks\":[\"...\"],\"redacted_input\":\"...\",\"next_input\":\"...\"}"
+workflowFormat Fallback            = "{\"fallback\":\"...\",\"reason\":\"...\",\"next_input\":\"...\"}"
+workflowFormat Router              = "{\"route\":\"...\",\"reason\":\"...\",\"next_input\":\"...\"}"
+workflowFormat Merger              = "{\"merged\":\"...\",\"sources_used\":[\"...\"],\"next_input\":\"...\"}"
+workflowFormat Ranker              = "{\"ranked\":[{\"rank\":1,\"item\":\"...\",\"reason\":\"...\"}],\"next_input\":\"...\"}"
+
+workflowInput :: [Value] -> String
+workflowInput [] = "No inputs."
+workflowInput vs = intercalate "\n"
+  [ "arg" ++ show i ++ ": " ++ valueText v
+  | (i, v) <- zip [0 :: Int ..] vs
+  ]
+
+withOutput :: Value -> Value
+withOutput v@(VRecord fs)
+  | any ((== "output") . fst) fs = v
+  | otherwise                    = VRecord (fs ++ [("output", VString (showVal v))])
+withOutput v = VRecord [("value", v), ("output", VString (valueText v))]
 
 -- | Returns @Just apiKey@ when the program opted in via
 --   @config { real_llm = true }@ and ANTHROPIC_API_KEY is set;
@@ -218,17 +315,22 @@ liveLlmEnabled cfg = case Map.lookup "real_llm" cfg of
 -- | Single-shot Claude Messages API call. Raw HTTP — no Haskell SDK exists.
 --   See https://docs.claude.com/en/api/messages
 callClaude :: String -> String -> String -> IO (Either String String)
-callClaude apiKey model prompt = do
+callClaude apiKey model prompt = callClaudeWithSystem apiKey model "" prompt
+
+callClaudeWithSystem :: String -> String -> String -> String -> IO (Either String String)
+callClaudeWithSystem apiKey model systemPrompt prompt = do
   let body = A.object
-        [ "model"      A..= model
-        , "max_tokens" A..= (1024 :: Int)
-        , "messages"   A..=
-            [ A.object
-                [ "role"    A..= ("user" :: T.Text)
-                , "content" A..= prompt
-                ]
-            ]
-        ]
+        ([ "model"      A..= model
+         , "max_tokens" A..= (1024 :: Int)
+         ]
+        ++ [ "system" A..= systemPrompt | not (null systemPrompt) ]
+        ++ [ "messages"   A..=
+              [ A.object
+                  [ "role"    A..= ("user" :: T.Text)
+                  , "content" A..= prompt
+                  ]
+              ]
+           ])
   initReq <- parseRequest "POST https://api.anthropic.com/v1/messages"
   let req = setRequestHeader "x-api-key"         [BS.pack apiKey]
           $ setRequestHeader "anthropic-version" ["2023-06-01"]
