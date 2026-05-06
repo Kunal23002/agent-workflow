@@ -1,0 +1,15 @@
+// EXPECT_OK
+// CHECK: output =
+// CHECK: validation =
+// CHECK: critique =
+// CHECK: summary =
+agent Plan      = FixedAgent(Planner);
+agent Validate  = FixedAgent(Validator);
+agent Critique  = FixedAgent(Critic);
+agent Summarize = FixedAgent(Summarizer);
+
+let plan       = Plan("quantum physics");
+let validation = Validate(plan.output);
+let critique   = Critique(validation.output);
+let summary    = Summarize(critique.output);
+let result = { validation = validation.output, critique = critique.output, summary = summary.output }

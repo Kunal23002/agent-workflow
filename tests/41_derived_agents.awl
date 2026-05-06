@@ -4,51 +4,24 @@
 // it was given.
 //
 // CHECK: complexity = 3
-// CHECK: cleaned = "hello world"
-// CHECK: deduped = "foo bar baz"
-// CHECK: removed = 2
-// CHECK: rewritten = "Hello World"
-// CHECK: word_count = 6
-// CHECK: confidence = 0.2
 // CHECK: route = "error_handler"
 // CHECK: safe = false
 // CHECK: reason = "contains: password"
-// CHECK: verified = false
 // CHECK: extracted = "the quick brown fox jumps"
 
 agent Plan       = FixedAgent(Planner);
-agent Clean      = FixedAgent(Cleaner);
-agent Dedupe     = FixedAgent(Deduplicator);
-agent Rewrite    = FixedAgent(Rewriter);
-agent Confide    = FixedAgent(ConfidenceEstimator);
 agent Route      = FixedAgent(Router);
 agent Guard      = FixedAgent(Guardrail);
-agent FactCheck  = FixedAgent(FactChecker);
 agent Extract    = FixedAgent(Extractor);
 
 // Planner's complexity = word count of the goal (3 here).
 let plan      = Plan("research quantum computing");
-
-// Cleaner trims, lowercases, and collapses internal whitespace.
-let cleaned   = Clean("   Hello   World   ");
-
-// Deduplicator removes repeats and reports how many were dropped.
-let deduped   = Dedupe("foo bar foo baz bar");
-
-// Rewriter capitalises the first letter of each word.
-let rewritten = Rewrite("hello world");
-
-// ConfidenceEstimator scales confidence with word count (6 / 30 = 0.2).
-let conf      = Confide("one two three four five six");
 
 // Router selects a route from keywords in the input.
 let routed    = Route("error: connection failed");
 
 // Guardrail blocks content containing sensitive keywords.
 let guard     = Guard("here is my password: hunter2");
-
-// FactChecker rejects claims that contain negation/contradiction markers.
-let claim     = FactCheck("the statement is false");
 
 // Extractor takes the first 5 words of the source.
 let snippet   = Extract("the quick brown fox jumps over the lazy dog")

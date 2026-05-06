@@ -59,9 +59,9 @@ symbol s = lexeme (void (string s))
 reservedNames :: [String]
 reservedNames =
   [ "config", "agent", "from", "let", "if", "then", "else"
-  , "fail", "retry", "try", "catch"
+  , "fail", "retry", "try", "catch", "print"
   , "FixedAgent", "CustomAI", "prompt", "model"
-  , "true", "false"
+  , "true", "false", "null"
   , "python", "http", "llm", "mock"
   ]
 
@@ -83,6 +83,11 @@ identifier = lexeme $ try $ do
   if name `elem` reservedNames
     then unexpected ("reserved word " ++ show name)
     else return name
+
+fieldName :: Parser String
+fieldName = identifier <|> choice (map reservedField reservedNames)
+  where
+    reservedField name = try (keyword name >> return name)
 
 -- ====================================================================
 -- 3. Literals.
@@ -210,14 +215,16 @@ postfixExpr = do
   e <- atom
   loop e
   where
-    loop e =  (do dot; f <- identifier; loop (EProj e f))
+    loop e =  (do dot; f <- fieldName; loop (EProj e f))
           <|> return e
 
 atom :: Parser Expr
 atom =  parens expr
+    <|> listLit
     <|> recordLit
     <|> stringE
     <|> numberE
+    <|> nullE
     <|> boolE
     <|> identAtom
 
@@ -235,13 +242,23 @@ boolE :: Parser Expr
 boolE =  (keyword "true"  >> return (EConst (VBool True)))
      <|> (keyword "false" >> return (EConst (VBool False)))
 
+nullE :: Parser Expr
+nullE = keyword "null" >> return (EConst VNull)
+
+listLit :: Parser Expr
+listLit = do
+  symbol "["
+  es <- commaSep expr
+  symbol "]"
+  return (EList es)
+
 recordLit :: Parser Expr
 recordLit = do
   fs <- braces (commaSep field)
   return (ERecord fs)
   where
     field = do
-      f <- identifier
+      f <- fieldName
       op "="
       e <- expr
       return (f, e)
@@ -276,6 +293,7 @@ stmt = choice
   , stmtFail
   , stmtRetry
   , stmtTryCatch
+  , stmtPrint
   ] <?> "statement"
 
 -- | @{ s₁ ; s₂ ; … }@ is right-folded into 'SSeq'.
@@ -293,7 +311,7 @@ stmtConfig = do
   return (SConfig fs)
   where
     configField = do
-      c <- identifier
+      c <- fieldName
       op "="
       e <- expr
       return (c, e)
@@ -317,8 +335,9 @@ agentRhs name =
    <|> (do keyword "CustomAI"
            symbol "("
            keyword "prompt"; op "="; pe <- expr
-           comma
-           keyword "model";  op "="; m  <- stringLitRaw
+           m <- optionMaybe $ try $ do
+             comma
+             keyword "model";  op "="; stringLitRaw
            symbol ")"
            return (SAgentCustom name pe m))
 
@@ -336,20 +355,12 @@ kindP = do
   case k of
     "Planner"             -> return Planner
     "TaskSplitter"        -> return TaskSplitter
-    "Searcher"            -> return Searcher
     "Extractor"           -> return Extractor
-    "Cleaner"             -> return Cleaner
-    "Deduplicator"        -> return Deduplicator
-    "Formatter"           -> return Formatter
     "Critic"              -> return Critic
-    "FactChecker"         -> return FactChecker
-    "ConfidenceEstimator" -> return ConfidenceEstimator
     "Writer"              -> return Writer
     "Summarizer"          -> return Summarizer
-    "Rewriter"            -> return Rewriter
     "Validator"           -> return Validator
     "Guardrail"           -> return Guardrail
-    "Fallback"            -> return Fallback
     "Router"              -> return Router
     "Merger"              -> return Merger
     "Ranker"              -> return Ranker
@@ -389,6 +400,12 @@ stmtTryCatch = do
   keyword "catch" ; x  <- identifier
   op "=>"         ; s2 <- stmt
   return (STryCatch s1 x s2)
+
+stmtPrint :: Parser Stmt
+stmtPrint = do
+  keyword "print"
+  e <- expr
+  return (SPrint e)
 
 -- ====================================================================
 -- 7. Entry point.

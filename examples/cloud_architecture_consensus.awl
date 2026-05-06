@@ -1,0 +1,61 @@
+config {
+  real_llm = true,
+  llm_model = "claude-opus-4-7"
+};
+
+agent AWSArchitect       = CustomAI(prompt = "You are a senior AWS data architect. Design an AWS architecture for the given big data warehouse use case. Be specific about services, tradeoffs, cost, security, scalability, and operational risks. Return JSON with provider, architecture, strengths, weaknesses, estimated_fit_score, and next_input.");
+agent AzureArchitect     = CustomAI(prompt = "You are a senior Azure data architect. Design an Azure architecture for the given big data warehouse use case. Be specific about services, tradeoffs, cost, security, scalability, and operational risks. Return JSON with provider, architecture, strengths, weaknesses, estimated_fit_score, and next_input.");
+agent CostReviewer       = CustomAI(prompt = "You are a cloud cost reviewer. Compare the AWS and Azure proposals for long-term warehouse cost, storage cost, compute elasticity, data transfer, and operational overhead. Return JSON with aws_cost_view, azure_cost_view, winner, confidence, and next_input.");
+agent SecurityReviewer   = CustomAI(prompt = "You are a cloud security reviewer. Compare the AWS and Azure proposals for identity, encryption, auditability, governance, private networking, compliance, and blast-radius control. Return JSON with aws_security_view, azure_security_view, winner, confidence, and next_input.");
+agent ScalabilityReviewer = CustomAI(prompt = "You are a scalability reviewer. Compare the AWS and Azure proposals for petabyte-scale storage, ingestion throughput, query concurrency, batch processing, streaming, and future growth. Return JSON with aws_scalability_view, azure_scalability_view, winner, confidence, and next_input.");
+agent Merge              = FixedAgent(Merger);
+agent Judge              = CustomAI(prompt = "You are the final architecture decision board. Given two cloud architecture proposals and multiple reviewer opinions, make one final decision: AWS or Azure. Return JSON with final_choice, decision_summary, decisive_reasons, risks, mitigation_plan, and next_input. Be decisive; do not end in a tie unless absolutely impossible.");
+agent Summarize          = FixedAgent(Summarizer);
+
+let use_case = "A retail company needs to host a big data warehouse for 5 PB of clickstream, transaction, inventory, and customer analytics data. The platform must support nightly ETL, near-real-time ingestion, BI dashboards for 500 analysts, strict PII governance, disaster recovery, and predictable cost growth over the next 3 years.";
+
+let aws_proposal   = AWSArchitect(use_case);
+let azure_proposal = AzureArchitect(use_case);
+
+let cost_review = CostReviewer({ use_case = use_case, aws = aws_proposal.output, azure = azure_proposal.output });
+let security_review = SecurityReviewer({ use_case = use_case, aws = aws_proposal.output, azure = azure_proposal.output });
+let scalability_review = ScalabilityReviewer({ use_case = use_case, aws = aws_proposal.output, azure = azure_proposal.output });
+
+let consensus_packet = Merge(
+  aws_proposal.output,
+  azure_proposal.output,
+  cost_review.output,
+  security_review.output,
+  scalability_review.output
+);
+
+let decision = Judge(consensus_packet.output);
+let executive_summary = Summarize(decision.output);
+
+print "--- use case ---";
+print use_case;
+print "--- AWS proposal ---";
+print aws_proposal.output;
+print "--- Azure proposal ---";
+print azure_proposal.output;
+print "--- cost review ---";
+print cost_review.output;
+print "--- security review ---";
+print security_review.output;
+print "--- scalability review ---";
+print scalability_review.output;
+print "--- final decision ---";
+print decision.output;
+print "--- executive summary ---";
+print executive_summary.output;
+
+let result = {
+  use_case = use_case,
+  aws_proposal = aws_proposal.output,
+  azure_proposal = azure_proposal.output,
+  cost_review = cost_review.output,
+  security_review = security_review.output,
+  scalability_review = scalability_review.output,
+  decision = decision.output,
+  executive_summary = executive_summary.output
+}

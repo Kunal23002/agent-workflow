@@ -1,0 +1,4 @@
+// EXPECT_ERR: real_llm is true but ANTHROPIC_API_KEY is not set
+config { real_llm = true };
+agent S = CustomAI(prompt = "Summarize");
+let r = S("text")

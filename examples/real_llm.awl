@@ -3,12 +3,13 @@
 // Run with:
 //   ANTHROPIC_API_KEY=sk-ant-...  cabal run awl -- examples/real_llm.awl
 //
-// Without ANTHROPIC_API_KEY set (or with `real_llm = false` / omitted),
-// every agent below falls back to the deterministic stub — so this file
-// is safe to run offline; you just get the simulated responses.
+// Without ANTHROPIC_API_KEY set, `allow_llm_fallback = true` makes every
+// agent below fall back to deterministic stubs with a warning.
 
 config {
-  real_llm = true
+  real_llm = true,
+  allow_llm_fallback = true,
+  llm_model = "claude-opus-4-7"
 };
 
 // `llm:"model"` backend — the prompt is the concatenation of all args.
@@ -16,18 +17,17 @@ agent Ask = FixedAgent(Planner);  // unrelated, just to show fixed agents still 
 agent Claude    from llm:"claude-opus-4-7";
 
 // CustomAI — the prompt is fixed at declaration; per-call argument is the input.
-agent Summarize = CustomAI(prompt = "Summarize the input in one sentence.",
-                           model  = "claude-opus-4-7");
+agent Summarize = CustomAI(prompt = "Summarize the input in one sentence.");
 
 let plan       = Ask("Research quantum error correction");
 let answer     = Claude("In one sentence, what is quantum error correction?");
 let summary    = Summarize("Quantum error correction protects quantum information from decoherence by encoding logical qubits into the entangled state of many physical qubits, so that errors on individual qubits can be detected and corrected without measuring the protected information.");
 
-// `answer.response` and `summary.output` hold the model's text when live;
+// `answer.output` and `summary.output` hold the model's text when live;
 // the simulated string otherwise.
 print "--- answer ---";
-print answer.response;
+print answer.output;
 print "--- summary ---";
 print summary.output;
 
-let result = { live_answer = answer.response, summary_text = summary.output }
+let result = { live_answer = answer.output, summary_text = summary.output }

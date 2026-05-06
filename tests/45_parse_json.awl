@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: choice = "AWS"
+// CHECK: score = 0.9
+// CHECK: items = ["cost", "scale"]
+let parsed = parse_json("{\"choice\":\"AWS\",\"score\":0.9,\"items\":[\"cost\",\"scale\"]}");
+let result = { choice = parsed.choice, score = parsed.score, items = parsed.items }

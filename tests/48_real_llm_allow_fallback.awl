@@ -1,0 +1,6 @@
+// EXPECT_OK
+// CHECK: [warn] real_llm = true but ANTHROPIC_API_KEY is not set; using deterministic stubs
+// CHECK: output = "(simulated configured-model response)"
+config { real_llm = true, allow_llm_fallback = true, llm_model = "configured-model" };
+agent S = CustomAI(prompt = "Summarize");
+let r = S("text")

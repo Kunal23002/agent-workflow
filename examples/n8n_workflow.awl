@@ -1,0 +1,32 @@
+config {
+  real_llm = true,
+  llm_model = "claude-opus-4-7"
+};
+
+agent Plan      = FixedAgent(Planner);
+agent Validate  = FixedAgent(Validator);
+agent Critique  = FixedAgent(Critic);
+agent Summarize = FixedAgent(Summarizer);
+
+let topic      = "quantum physics";
+let plan       = Plan(topic);
+let validation = Validate(plan.output);
+let critique   = Critique(validation.output);
+let summary    = Summarize(critique.output);
+
+print "--- plan ---";
+print plan.output;
+print "--- validation ---";
+print validation.output;
+print "--- critique ---";
+print critique.output;
+print "--- summary ---";
+print summary.output;
+
+let result = {
+  topic = topic,
+  plan = plan.output,
+  validation = validation.output,
+  critique = critique.output,
+  summary = summary.output
+}
